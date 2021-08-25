@@ -47,16 +47,35 @@ defmodule GenReport do
     {:error, "Insira o nome de um arquivo"}
   end
 
+  def build_from_may(file_names) do
+    file_names
+    |> Task.async_stream(&build/1)
+    |> Enum.reduce(people_acc(), fn {:ok, result}, report -> sum_reports(report, result) end)
+  end
+
+  defp sum_reports(%{
+         "all_hours" => all_hours1,
+         "hours_per_month" => hours_per_month1,
+         "hours_per_year" => hours_per_year1
+       }, %{
+         "all_hours" => all_hours2,
+         "hours_per_month" => hours_per_month2,
+         "hours_per_year" => hours_per_year2
+       }) do
+    all_hours = merge_maps(all_hours1, all_hours2)
+    hours_per_month = merge_nested_maps(hours_per_month1, hours_per_month2)
+    hours_per_year = merge_nested_maps(hours_per_year1, hours_per_year2)
+
+
+    build_report(all_hours, hours_per_month, hours_per_year)
+  end
+
   defp people_acc() do
     all_hours = Enum.into(@people, %{}, &{&1, 0})
     hours_per_month = Enum.into(@people, %{}, &{&1, @months})
     hours_per_year = Enum.into(@people, %{}, &{&1, @years})
 
-    %{
-      "all_hours" => all_hours,
-      "hours_per_month" => hours_per_month,
-      "hours_per_year" => hours_per_year
-    }
+    build_report(all_hours, hours_per_month, hours_per_year)
   end
 
   defp add_hours([name, hours, _day, month, year], %{
@@ -74,6 +93,18 @@ defmodule GenReport do
 
     hours_per_year = put_in(hours_per_year[name][year], hours_per_year[name][year] + hours)
 
+    build_report(all_hours, hours_per_month, hours_per_year)
+  end
+
+  defp merge_maps(map1, map2) do
+    Map.merge(map1, map2, fn _key, value1, value2 -> value1 + value2 end)
+  end
+
+  defp merge_nested_maps(map1, map2) do
+    Map.merge(map1, map2, fn _key, value1, value2 -> merge_maps(value1, value2) end)
+  end
+
+  defp build_report(all_hours, hours_per_month, hours_per_year) do
     %{
       "all_hours" => all_hours,
       "hours_per_month" => hours_per_month,
